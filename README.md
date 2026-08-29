@@ -7,11 +7,14 @@ Aplicación web privada, sencilla y adaptada a móviles para analizar publicacio
 ## Plataformas previstas
 
 - Instagram (`instagram.com`).
+- TikTok (`tiktok.com`, incluidos sus enlaces cortos `vm.tiktok.com` y `vt.tiktok.com`).
 - YouTube (`youtube.com`, `youtu.be` y `youtube-nocookie.com`).
 - Facebook (`facebook.com` y `fb.watch`).
 - X/Twitter (`x.com` y `twitter.com`).
 
 El soporte real depende de los cambios de cada plataforma y de la versión de `yt-dlp`. Solo se admiten publicaciones públicas: no se usan cookies, cuentas, credenciales, evasión de DRM ni técnicas para saltar restricciones.
+
+Para TikTok, RitaDown descarga el flujo público original que `yt-dlp` pueda obtener. Normalmente es el flujo sin marca de agua que la plataforma expone para esa publicación; RitaDown no elimina ni altera marcas de agua mediante procesamiento de vídeo. Si TikTok no ofrece ese flujo o limita el acceso, la descarga puede fallar.
 
 La imagen incluye Deno y `yt-dlp-ejs` exclusivamente como runtime interno para el soporte moderno de YouTube. El frontend continúa siendo HTML, CSS y JavaScript directo, sin Node.js ni proceso de compilación.
 

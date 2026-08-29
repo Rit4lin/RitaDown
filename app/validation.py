@@ -15,6 +15,7 @@ ALLOWED_DOMAIN_SUFFIXES = (
     "youtube.com",
     "youtu.be",
     "youtube-nocookie.com",
+    "tiktok.com",
 )
 ALLOWED_PORTS = {80, 443}
 
@@ -87,7 +88,7 @@ def validate_media_url(raw_url: str, *, resolve_dns: bool = True) -> ValidatedUR
 
     if not _is_allowed_hostname(hostname):
         raise URLValidationError(
-            "Solo se admiten enlaces públicos de Instagram, YouTube, Facebook y X/Twitter."
+            "Solo se admiten enlaces públicos de Instagram, TikTok, YouTube, Facebook y X/Twitter."
         )
     if resolve_dns:
         resolve_public_addresses(hostname)

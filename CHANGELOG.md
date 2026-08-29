@@ -4,6 +4,12 @@ Todos los cambios relevantes de RitaDown se documentan en este archivo.
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [1.1.0] - 2026-08-29
+
+### Añadido
+
+- Compatibilidad con enlaces públicos de TikTok, incluidos `vm.tiktok.com` y `vt.tiktok.com`.
+
 ## [1.0.0] - 2026-08-29
 
 ### Añadido

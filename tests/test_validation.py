@@ -15,6 +15,9 @@ class URLValidationTests(unittest.TestCase):
     def test_accepts_allowed_public_domains(self, _getaddrinfo) -> None:
         cases = (
             ("https://www.instagram.com/reel/example/", "www.instagram.com"),
+            ("https://www.tiktok.com/@example/video/123", "www.tiktok.com"),
+            ("https://vm.tiktok.com/example/", "vm.tiktok.com"),
+            ("https://vt.tiktok.com/example/", "vt.tiktok.com"),
             ("https://m.facebook.com/watch/?v=123", "m.facebook.com"),
             ("https://fb.watch/example", "fb.watch"),
             ("https://x.com/example/status/123", "x.com"),
