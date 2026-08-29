@@ -1,0 +1,32 @@
+services:
+  ritadown:
+    image: ghcr.io/rit4lin/ritadown:${RITADL_TAG:-latest}
+    init: true
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ritadown-data:/app/downloads
+    restart: unless-stopped
+    environment:
+      EXTRACT_TIMEOUT_SECONDS: ${EXTRACT_TIMEOUT_SECONDS:-60}
+      DOWNLOAD_TIMEOUT_SECONDS: ${DOWNLOAD_TIMEOUT_SECONDS:-1800}
+      VIDEO_ENCODER_BACKEND: ${VIDEO_ENCODER_BACKEND:-auto}
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  ritadown-data:

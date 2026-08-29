@@ -1,0 +1,86 @@
+import socket
+import unittest
+from unittest.mock import patch
+
+from app.validation import URLValidationError, validate_media_url
+
+
+PUBLIC_DNS_RESULT = [
+    (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))
+]
+
+
+class URLValidationTests(unittest.TestCase):
+    @patch("app.validation.socket.getaddrinfo", return_value=PUBLIC_DNS_RESULT)
+    def test_accepts_allowed_public_domains(self, _getaddrinfo) -> None:
+        cases = (
+            ("https://www.instagram.com/reel/example/", "www.instagram.com"),
+            ("https://m.facebook.com/watch/?v=123", "m.facebook.com"),
+            ("https://fb.watch/example", "fb.watch"),
+            ("https://x.com/example/status/123", "x.com"),
+            ("https://mobile.twitter.com/example/status/123", "mobile.twitter.com"),
+            ("https://www.youtube.com/watch?v=example", "www.youtube.com"),
+            ("https://youtu.be/example", "youtu.be"),
+        )
+        for url, expected_host in cases:
+            with self.subTest(url=url):
+                self.assertEqual(validate_media_url(url).hostname, expected_host)
+
+    def test_rejects_localhost_and_loopback(self) -> None:
+        for url in (
+            "http://localhost/video",
+            "http://127.0.0.1/video",
+            "http://[::1]/video",
+        ):
+            with self.subTest(url=url), self.assertRaises(URLValidationError):
+                validate_media_url(url, resolve_dns=False)
+
+    @patch(
+        "app.validation.socket.getaddrinfo",
+        return_value=[
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.20", 0))
+        ],
+    )
+    def test_rejects_private_dns_destination(self, _getaddrinfo) -> None:
+        with self.assertRaisesRegex(URLValidationError, "red privada"):
+            validate_media_url("https://www.instagram.com/reel/example/")
+
+    @patch("app.validation.socket.getaddrinfo", return_value=PUBLIC_DNS_RESULT)
+    def test_rejects_credentials(self, _getaddrinfo) -> None:
+        with self.assertRaisesRegex(URLValidationError, "usuario"):
+            validate_media_url("https://user:secret@x.com/example/status/123")
+
+    def test_rejects_domains_outside_allowlist(self) -> None:
+        for url in (
+            "https://example.org/video",
+            "https://instagram.com.evil.example/video",
+            "https://notfacebook.com/video",
+            "https://youtube.com.evil.example/video",
+        ):
+            with self.subTest(url=url), self.assertRaises(URLValidationError):
+                validate_media_url(url, resolve_dns=False)
+
+    def test_rejects_non_http_schemes(self) -> None:
+        for url in ("ftp://x.com/video", "file:///etc/passwd", "javascript:alert(1)"):
+            with self.subTest(url=url), self.assertRaises(URLValidationError):
+                validate_media_url(url, resolve_dns=False)
+
+    @patch("app.validation.socket.getaddrinfo", return_value=PUBLIC_DNS_RESULT)
+    def test_rejects_nonstandard_ports(self, _getaddrinfo) -> None:
+        with self.assertRaisesRegex(URLValidationError, "puerto"):
+            validate_media_url("https://x.com:8443/example/status/123")
+
+    @patch(
+        "app.validation.socket.getaddrinfo",
+        return_value=[
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 0)),
+        ],
+    )
+    def test_rejects_any_non_public_dns_answer(self, _getaddrinfo) -> None:
+        with self.assertRaisesRegex(URLValidationError, "red privada"):
+            validate_media_url("https://facebook.com/watch/?v=123")
+
+
+if __name__ == "__main__":
+    unittest.main()
