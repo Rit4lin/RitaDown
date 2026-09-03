@@ -178,7 +178,7 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/api/analyze")
-async def analyze(payload: URLRequest) -> dict[str, object] | JSONResponse:
+async def analyze(payload: URLRequest):  # type: ignore[no-untyped-def]
     try:
         validated = await asyncio.to_thread(validate_media_url, payload.url)
         info = await analyze_url(validated.url, timeout_seconds=EXTRACT_TIMEOUT)
@@ -199,7 +199,7 @@ async def analyze(payload: URLRequest) -> dict[str, object] | JSONResponse:
 
 
 @app.post("/api/download")
-async def download(payload: DownloadRequest) -> FileResponse | JSONResponse:
+async def download(payload: DownloadRequest):  # type: ignore[no-untyped-def]
     if download_lock.locked():
         return _error_response(
             429,
