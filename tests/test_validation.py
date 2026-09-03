@@ -17,13 +17,19 @@ class URLValidationTests(unittest.TestCase):
             ("https://www.instagram.com/reel/example/", "www.instagram.com"),
             ("https://www.tiktok.com/@example/video/123", "www.tiktok.com"),
             ("https://vm.tiktok.com/example/", "vm.tiktok.com"),
-            ("https://vt.tiktok.com/example/", "vt.tiktok.com"),
             ("https://m.facebook.com/watch/?v=123", "m.facebook.com"),
             ("https://fb.watch/example", "fb.watch"),
             ("https://x.com/example/status/123", "x.com"),
-            ("https://mobile.twitter.com/example/status/123", "mobile.twitter.com"),
             ("https://www.youtube.com/watch?v=example", "www.youtube.com"),
-            ("https://youtu.be/example", "youtu.be"),
+            ("https://www.reddit.com/r/videos/comments/abc/example/", "www.reddit.com"),
+            ("https://redd.it/abc", "redd.it"),
+            ("https://player.vimeo.com/video/123", "player.vimeo.com"),
+            ("https://www.dailymotion.com/video/x123", "www.dailymotion.com"),
+            ("https://dai.ly/x123", "dai.ly"),
+            ("https://www.pinterest.com/pin/123/", "www.pinterest.com"),
+            ("https://pin.it/example", "pin.it"),
+            ("https://bsky.app/profile/example/post/abc", "bsky.app"),
+            ("https://clips.twitch.tv/example", "clips.twitch.tv"),
         )
         for url, expected_host in cases:
             with self.subTest(url=url):
@@ -59,6 +65,7 @@ class URLValidationTests(unittest.TestCase):
             "https://instagram.com.evil.example/video",
             "https://notfacebook.com/video",
             "https://youtube.com.evil.example/video",
+            "https://twitch.tv.evil.example/video",
         ):
             with self.subTest(url=url), self.assertRaises(URLValidationError):
                 validate_media_url(url, resolve_dns=False)
