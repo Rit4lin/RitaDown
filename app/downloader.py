@@ -98,7 +98,7 @@ async def _run_process(
         env=child_environment,
     )
     try:
-        stdout, _stderr = await asyncio.wait_for(
+        stdout, stderr = await asyncio.wait_for(
             process.communicate(), timeout=timeout_seconds
         )
     except TimeoutError as exc:
@@ -107,7 +107,15 @@ async def _run_process(
         raise DownloaderError("La operación tardó demasiado y fue cancelada.") from exc
 
     if process.returncode != 0:
-        logger.warning("El proceso falló durante %s (código %s)", stage, process.returncode)
+        stderr_text = stderr.decode("utf-8", errors="replace").strip()
+        if len(stderr_text) > 8000:
+            stderr_text = f"{stderr_text[:8000]}\n...[stderr truncado]"
+        logger.warning(
+            "El proceso falló durante %s (código %s). stderr: %s",
+            stage,
+            process.returncode,
+            stderr_text or "<vacío>",
+        )
         raise DownloaderError(failure_message)
     return stdout
 
