@@ -4,12 +4,13 @@ import asyncio
 import logging
 import os
 import time
+import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import AsyncIterator, Literal
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,6 +64,42 @@ rate_limiter = RateLimiter()
 download_lock = asyncio.Lock()
 
 
+def _error_reference() -> str:
+    return uuid.uuid4().hex[:8].upper()
+
+
+def _error_response(
+    status_code: int,
+    detail: str,
+    code: str,
+    *,
+    reference: str | None = None,
+) -> JSONResponse:
+    content: dict[str, str] = {"detail": detail, "code": code}
+    if reference:
+        content["reference"] = reference
+    return JSONResponse(status_code=status_code, content=content)
+
+
+def _downloader_error_code(message: str) -> str:
+    normalized = message.lower()
+    if "tardó demasiado" in normalized:
+        return "RDL-2101"
+    if "plataforma no pudo procesar" in normalized:
+        return "RDL-2100"
+    if "listas" in normalized or "carruseles" in normalized:
+        return "RDL-2102"
+    if "metadatos" in normalized or "interpretar la información" in normalized:
+        return "RDL-2103"
+    if "500 mb" in normalized:
+        return "RDL-3201"
+    if "ffmpeg" in normalized:
+        return "RDL-3100"
+    if "generar correctamente" in normalized or "no se encontró" in normalized:
+        return "RDL-3200"
+    return "RDL-2000"
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     DOWNLOAD_ROOT.mkdir(parents=True, exist_ok=True)
@@ -89,9 +126,10 @@ async def security_and_rate_limit(request: Request, call_next):  # type: ignore[
     if request.url.path.startswith("/api/"):
         content_length = request.headers.get("content-length")
         if content_length and content_length.isdigit() and int(content_length) > 16_384:
-            response = JSONResponse(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                content={"detail": "La solicitud es demasiado grande."},
+            response = _error_response(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                "La solicitud es demasiado grande.",
+                "RDL-1002",
             )
             response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
             response.headers["X-Content-Type-Options"] = "nosniff"
@@ -100,9 +138,10 @@ async def security_and_rate_limit(request: Request, call_next):  # type: ignore[
             return response
         client = request.client.host if request.client else "unknown"
         if not await rate_limiter.allowed(client):
-            response = JSONResponse(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": "Demasiadas solicitudes. Espera unos minutos."},
+            response = _error_response(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Demasiadas solicitudes. Espera unos minutos.",
+                "RDL-1003",
             )
         else:
             response = await call_next(request)
@@ -125,7 +164,7 @@ async def security_and_rate_limit(request: Request, call_next):  # type: ignore[
 async def validation_exception_handler(
     _request: Request, _exc: RequestValidationError
 ) -> JSONResponse:
-    return JSONResponse(status_code=422, content={"detail": "Solicitud no válida."})
+    return _error_response(422, "Solicitud no válida.", "RDL-1001")
 
 
 @app.get("/")
@@ -139,24 +178,33 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/api/analyze")
-async def analyze(payload: URLRequest) -> dict[str, object]:
+async def analyze(payload: URLRequest) -> dict[str, object] | JSONResponse:
     try:
         validated = await asyncio.to_thread(validate_media_url, payload.url)
         info = await analyze_url(validated.url, timeout_seconds=EXTRACT_TIMEOUT)
         return {"media": info.as_dict()}
-    except (URLValidationError, DownloaderError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except URLValidationError as exc:
+        return _error_response(400, str(exc), "RDL-1000")
+    except DownloaderError as exc:
+        return _error_response(400, str(exc), _downloader_error_code(str(exc)))
     except Exception as exc:
-        logger.error("Fallo interno durante el análisis (%s)", type(exc).__name__)
-        raise HTTPException(status_code=500, detail="No se pudo analizar el enlace.") from exc
+        reference = _error_reference()
+        logger.exception("[RDL-5000/%s] Fallo interno durante el análisis (%s)", reference, type(exc).__name__)
+        return _error_response(
+            500,
+            "No se pudo analizar el enlace.",
+            "RDL-5000",
+            reference=reference,
+        )
 
 
 @app.post("/api/download")
-async def download(payload: DownloadRequest) -> FileResponse:
+async def download(payload: DownloadRequest) -> FileResponse | JSONResponse:
     if download_lock.locked():
-        raise HTTPException(
-            status_code=429,
-            detail="Ya hay una descarga en curso. Inténtalo cuando termine.",
+        return _error_response(
+            429,
+            "Ya hay una descarga en curso. Inténtalo cuando termine.",
+            "RDL-1004",
         )
     async with download_lock:
         try:
@@ -179,8 +227,16 @@ async def download(payload: DownloadRequest) -> FileResponse:
                     remove_job_directory, downloaded.job_directory
                 ),
             )
-        except (URLValidationError, DownloaderError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except URLValidationError as exc:
+            return _error_response(400, str(exc), "RDL-1000")
+        except DownloaderError as exc:
+            return _error_response(400, str(exc), _downloader_error_code(str(exc)))
         except Exception as exc:
-            logger.error("Fallo interno durante la descarga (%s)", type(exc).__name__)
-            raise HTTPException(status_code=500, detail="No se pudo preparar el vídeo.") from exc
+            reference = _error_reference()
+            logger.exception("[RDL-5000/%s] Fallo interno durante la descarga (%s)", reference, type(exc).__name__)
+            return _error_response(
+                500,
+                "No se pudo preparar el vídeo.",
+                "RDL-5000",
+                reference=reference,
+            )
