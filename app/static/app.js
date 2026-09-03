@@ -17,7 +17,6 @@ const elements = {
   codecOption: document.querySelector("#codec-option"),
   audioQuality: document.querySelector("#audio-quality"),
   audioQualityOption: document.querySelector("#audio-quality-option"),
-  conversionNote: document.querySelector("#conversion-note"),
   download: document.querySelector("#download"),
   reset: document.querySelector("#reset"),
 };
@@ -54,9 +53,14 @@ function formatDuration(seconds) {
 async function errorFromResponse(response) {
   try {
     const payload = await response.json();
-    return payload.detail || "La solicitud no se pudo completar.";
+    const message = payload.detail || "La solicitud no se pudo completar.";
+    if (!payload.code) return message;
+    const suffix = payload.reference
+      ? `Código: ${payload.code} · Ref: ${payload.reference}`
+      : `Código: ${payload.code}`;
+    return `${message} ${suffix}`;
   } catch {
-    return "La solicitud no se pudo completar.";
+    return `La solicitud no se pudo completar. Código HTTP: ${response.status}`;
   }
 }
 
@@ -71,27 +75,21 @@ function updateFormatOptions() {
   elements.videoQualityOption.hidden = isAudio;
   elements.codecOption.hidden = isAudio;
   elements.audioQualityOption.hidden = !isAudio;
-  elements.conversionNote.textContent = isAudio
-    ? "El MP3 se extrae del mejor audio disponible; un bitrate superior no mejora una fuente de menor calidad."
-    : elements.videoCodec.value === "original"
-      ? "El códec original evita recodificar y termina mucho antes."
-      : "La conversión de códec usa FFmpeg, consume más CPU y puede tardar bastante.";
   elements.download.textContent = isAudio ? "Descargar MP3" : "Descargar vídeo";
 }
 
 elements.outputFormat.addEventListener("change", updateFormatOptions);
-elements.videoCodec.addEventListener("change", updateFormatOptions);
 updateFormatOptions();
 
 elements.analyze.addEventListener("click", async () => {
   const url = elements.url.value.trim();
   if (!url) {
-    showStatus("Introduce la URL de la publicación.", "error");
+    showStatus("Introduce una URL.", "error");
     return;
   }
   setBusy(true);
   elements.result.hidden = true;
-  showStatus("Validando el enlace y obteniendo la información…");
+  showStatus("Analizando…");
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -115,7 +113,7 @@ elements.analyze.addEventListener("click", async () => {
       elements.thumbnail.hidden = true;
     }
     elements.result.hidden = false;
-    showStatus("Vídeo analizado. Elige la calidad para descargarlo.", "success");
+    showStatus("Listo.", "success");
   } catch (error) {
     showStatus(error.message || "No se pudo analizar el enlace.", "error");
   } finally {
@@ -125,7 +123,7 @@ elements.analyze.addEventListener("click", async () => {
 
 elements.download.addEventListener("click", async () => {
   if (!analyzedUrl || elements.url.value.trim() !== analyzedUrl) {
-    showStatus("El enlace ha cambiado. Analízalo de nuevo antes de descargar.", "error");
+    showStatus("El enlace ha cambiado. Analízalo de nuevo.", "error");
     elements.result.hidden = true;
     return;
   }
@@ -134,10 +132,10 @@ elements.download.addEventListener("click", async () => {
   const isConversion = !isAudio && elements.videoCodec.value !== "original";
   showStatus(
     isAudio
-      ? "Extrayendo el audio y preparando el MP3…"
+      ? "Preparando MP3…"
       : isConversion
-        ? `Descargando y convirtiendo a ${elements.videoCodec.value.toUpperCase()}. Puede tardar bastante…`
-        : "Descargando y preparando el MP4 sin recodificar…"
+        ? `Convirtiendo a ${elements.videoCodec.value.toUpperCase()}…`
+        : "Preparando MP4…"
   );
   try {
     const response = await fetch("/api/download", {
@@ -152,7 +150,6 @@ elements.download.addEventListener("click", async () => {
       }),
     });
     if (!response.ok) throw new Error(await errorFromResponse(response));
-    showStatus("Transferencia preparada. Iniciando la descarga del navegador…", "success");
     const blob = await response.blob();
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -166,7 +163,7 @@ elements.download.addEventListener("click", async () => {
     link.click();
     link.remove();
     URL.revokeObjectURL(objectUrl);
-    showStatus("Descarga enviada al navegador.", "success");
+    showStatus("Descarga iniciada.", "success");
   } catch (error) {
     showStatus(error.message || "No se pudo descargar el vídeo.", "error");
   } finally {
