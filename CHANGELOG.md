@@ -4,6 +4,23 @@ Todos los cambios relevantes de RitaDown se documentan en este archivo.
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [1.2.0] - 2026-09-03
+
+### Añadido
+
+- Compatibilidad explícita con Reddit, Vimeo, Dailymotion, Pinterest, Bluesky y Twitch.
+- Nuevas salidas de audio M4A, Opus y audio original sin recodificación.
+- Descarga de subtítulos SRT y posibilidad de incrustar subtítulos en MP4 en español, idioma original o automáticos.
+- Cola interna de descargas para varios usuarios, con posición de espera y hasta 8 trabajos pendientes por defecto.
+- Progreso en tiempo real con porcentaje de `yt-dlp`, velocidad, ETA y progreso de FFmpeg cuando se conoce la duración.
+- Monitor diario de plataformas mediante GitHub Actions, con incidencia automática cuando falla alguna plataforma.
+
+### Cambiado
+
+- La API de descarga de la interfaz usa trabajos asíncronos (`/api/jobs`) y entrega el archivo cuando el procesamiento termina.
+- Las consultas de estado de trabajos no consumen el límite de peticiones destinado a operaciones POST.
+- La documentación refleja los formatos, plataformas y ajustes nuevos.
+
 ## [1.1.2] - 2026-09-03
 
 ### Corregido
