@@ -4,6 +4,19 @@ Todos los cambios relevantes de RitaDown se documentan en este archivo.
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [1.1.2] - 2026-09-03
+
+### Corregido
+
+- Fijado `curl-cffi` en `0.16.0` como solución temporal al bloqueo actual de TikTok provocado por objetivos de impersonación más recientes.
+- Los errores de la API muestran códigos públicos estables (`RDL-xxxx`) sin exponer `stderr`, rutas internas ni detalles sensibles.
+- Los fallos internos incluyen una referencia corta que también queda registrada en los logs del contenedor.
+
+### Cambiado
+
+- Simplificada la interfaz eliminando avisos, notas y textos redundantes.
+- Reducidos los mensajes de estado a indicaciones breves durante análisis, conversión y descarga.
+
 ## [1.1.1] - 2026-09-03
 
 ### Corregido
