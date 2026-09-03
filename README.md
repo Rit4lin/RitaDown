@@ -1,38 +1,93 @@
 # RitaDown
 
-Aplicación web privada, sencilla y adaptada a móviles para analizar publicaciones públicas y descargar un único vídeo en MP4 o extraer su audio en MP3. Se distribuye como imagen Docker y está preparada para ejecutarse en tu propio servidor.
+Aplicación web privada y adaptada a móviles para analizar y descargar contenido multimedia público mediante `yt-dlp`. Se distribuye como imagen Docker y está pensada para ejecutarse en un servidor propio.
 
 > Usa RitaDown únicamente con contenido propio o cuando dispongas de autorización para descargarlo. Respeta los derechos de autor, los términos de cada plataforma y la legislación aplicable.
 
-## Plataformas previstas
+## Plataformas
 
-- Instagram (`instagram.com`).
-- TikTok (`tiktok.com`, incluidos sus enlaces cortos `vm.tiktok.com` y `vt.tiktok.com`).
-- YouTube (`youtube.com`, `youtu.be` y `youtube-nocookie.com`).
-- Facebook (`facebook.com` y `fb.watch`).
-- X/Twitter (`x.com` y `twitter.com`).
+RitaDown admite explícitamente estas plataformas y mantiene una allowlist de dominios:
 
-El soporte real depende de los cambios de cada plataforma y de la versión de `yt-dlp`. Solo se admiten publicaciones públicas: no se usan cookies, cuentas, credenciales, evasión de DRM ni técnicas para saltar restricciones.
+- Instagram.
+- TikTok, incluidos `vm.tiktok.com` y `vt.tiktok.com`.
+- YouTube.
+- Facebook.
+- X/Twitter.
+- Reddit.
+- Vimeo.
+- Dailymotion.
+- Pinterest.
+- Bluesky.
+- Twitch VOD y clips.
 
-Para TikTok, RitaDown descarga el flujo público original que `yt-dlp` pueda obtener. Normalmente es el flujo sin marca de agua que la plataforma expone para esa publicación; RitaDown no elimina ni altera marcas de agua mediante procesamiento de vídeo. Si TikTok no ofrece ese flujo o limita el acceso, la descarga puede fallar.
+El soporte real depende de los cambios de cada plataforma y de `yt-dlp`. Solo se procesan enlaces públicos: RitaDown no usa cuentas, credenciales ni mecanismos para eludir DRM.
 
-La imagen incluye Deno y `yt-dlp-ejs` exclusivamente como runtime interno para el soporte moderno de YouTube. El frontend continúa siendo HTML, CSS y JavaScript directo, sin Node.js ni proceso de compilación.
+## Formatos
 
-## Límites y seguridad
+### Vídeo
 
-- Solo se aceptan HTTP/HTTPS, dominios permitidos y destinos DNS con direcciones IP públicas.
-- Se rechazan credenciales en la URL, puertos no estándar, listas, carruseles y descargas múltiples.
-- Hay un límite de 500 MB, un único procesamiento simultáneo, timeouts y limitación básica por IP.
-- Cada operación vuelve a validar el enlace. La validación DNS reduce el riesgo SSRF, aunque `yt-dlp` necesita seguir redirecciones y acceder a CDN de las plataformas; por ello no debe exponerse directamente a Internet.
-- El formato MP4 permite conservar el códec original o convertir expresamente a H.264 o H.265/HEVC. La opción original es la más rápida. H.264 ofrece mayor compatibilidad; H.265 suele ocupar menos, pero tarda más y no funciona en todos los dispositivos.
-- Las conversiones H.264/H.265 usan NVIDIA NVENC cuando `VIDEO_ENCODER_BACKEND` lo solicita o cuando el modo `auto` detecta una GPU NVIDIA expuesta por Docker. Si NVENC falla, la aplicación reintenta automáticamente mediante CPU.
-- Las calidades de vídeo son original, 2160p, 1440p, 1080p, 720p, 480p y 360p. Cada valor es un máximo: nunca se amplía artificialmente una fuente de menor resolución.
-- El formato MP3 permite elegir 320, 256, 192 o 128 kbps. Convertir a un bitrate alto no recupera calidad que la fuente no tenga.
-- Los archivos se guardan en directorios UUID y se borran al terminar la respuesta. Una tarea periódica elimina restos antiguos tras fallos o interrupciones.
+- MP4 en calidad original o con límite de 2160p, 1440p, 1080p, 720p, 480p o 360p.
+- Códec original, H.264 o H.265/HEVC.
+- Conversión H.264/H.265 mediante NVIDIA NVENC cuando está disponible, con respaldo automático por CPU.
+
+### Audio
+
+- Audio original, sin recodificar cuando es posible.
+- M4A.
+- Opus.
+- MP3 a 320, 256, 192 o 128 kbps.
+
+### Subtítulos
+
+- Sin subtítulos.
+- Español.
+- Idioma original.
+- Subtítulos automáticos.
+- Los subtítulos pueden incrustarse en el MP4.
+- También pueden descargarse como archivo SRT independiente.
+
+## Cola y progreso
+
+Las descargas se procesan mediante una cola interna para que varios usuarios puedan enviar trabajos sin recibir el antiguo error de «ya hay una descarga en curso».
+
+La interfaz muestra:
+
+- posición en cola;
+- fase actual;
+- porcentaje real comunicado por `yt-dlp`;
+- velocidad y ETA cuando están disponibles;
+- progreso de la conversión FFmpeg cuando se conoce la duración.
+
+La cola admite 8 trabajos pendientes de forma predeterminada y puede ajustarse con `MAX_QUEUE_SIZE`.
+
+## Monitor automático de plataformas
+
+El workflow `Platform health` se ejecuta diariamente y comprueba las plataformas admitidas contra enlaces públicos de referencia usando `yt-dlp --skip-download`.
+
+Si alguna plataforma deja de responder:
+
+1. el workflow queda marcado como fallido;
+2. se abre o actualiza una única incidencia de GitHub con el estado de todas las plataformas;
+3. cuando todas vuelven a funcionar, la incidencia se cierra automáticamente.
+
+Esto ayuda a detectar cambios de TikTok, Instagram, X y otras plataformas antes de encontrarlos manualmente.
+
+## Seguridad
+
+- Solo se aceptan HTTP/HTTPS.
+- Los dominios están en una allowlist explícita.
+- Se rechazan credenciales en URL y puertos no estándar.
+- La resolución DNS rechaza direcciones privadas, loopback, link-local y otros destinos no públicos para reducir el riesgo SSRF.
+- Se rechazan listas, carruseles y publicaciones con varios vídeos.
+- Límite máximo de archivo: 500 MB.
+- Los detalles internos de `yt-dlp` y FFmpeg se guardan en logs, no se muestran en el navegador.
+- Los errores públicos usan códigos `RDL-xxxx`; los fallos internos incorporan además una referencia corta para localizar el evento en los logs.
+- Los trabajos usan identificadores UUID y los archivos temporales se eliminan tras la descarga o por limpieza periódica.
+- El contenedor se ejecuta sin root, con capacidades eliminadas y filesystem de solo lectura en los Compose incluidos.
+
+RitaDown no incluye autenticación. Si se accede desde Internet debe situarse detrás de un proxy inverso con HTTPS y autenticación o de una solución equivalente.
 
 ## Instalación
-
-La imagen publicada se encuentra en GitHub Container Registry. Crea un archivo `compose.yaml` con este contenido:
 
 ```yaml
 services:
@@ -48,121 +103,74 @@ volumes:
   ritadown-data:
 ```
 
-Arranca el servicio:
+Arranque:
 
 ```bash
 docker compose up -d
 ```
 
-Abre <http://127.0.0.1:8787>. Para actualizar a la última versión publicada:
+Actualización:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-El puerto se enlaza de forma deliberada solo a `127.0.0.1`. Para usar RitaDown desde otro equipo, publícalo detrás de una VPN privada o de un proxy inverso con HTTPS y autenticación. No lo expongas directamente a Internet.
+Interfaz local: `http://127.0.0.1:8787`.
 
-## NVIDIA / NVENC opcional
+## Variables opcionales
 
-Si tu servidor tiene una GPU NVIDIA configurada para Docker, añade un archivo `compose.nvidia.yaml`:
-
-```yaml
-services:
-  ritadown:
-    runtime: nvidia
-    environment:
-      VIDEO_ENCODER_BACKEND: nvenc
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+```env
+EXTRACT_TIMEOUT_SECONDS=60
+DOWNLOAD_TIMEOUT_SECONDS=1800
+MAX_QUEUE_SIZE=8
+JOB_MAX_AGE_SECONDS=3600
+VIDEO_ENCODER_BACKEND=auto
 ```
 
-Y arranca con:
+`VIDEO_ENCODER_BACKEND` admite `auto`, `nvenc` o `cpu`.
+
+## NVIDIA / NVENC
+
+En Unraid instala primero **Nvidia-Driver** y expón la GPU al contenedor. El archivo `compose.nvidia.yaml` incluido activa NVENC:
 
 ```bash
 docker compose -f compose.yaml -f compose.nvidia.yaml up -d
 ```
 
-En Unraid necesitas primero el plugin **Nvidia-Driver**. La aceleración se aplica únicamente al convertir a H.264 o H.265; no acelera MP3 ni el modo de códec original.
+NVENC solo afecta a las conversiones de vídeo H.264/H.265.
 
-## Desarrollo local
-
-No se necesita configuración para arrancar. Opcionalmente, puedes crear `.env` para cambiar los tiempos máximos de análisis y descarga:
+## Desarrollo
 
 ```powershell
-Copy-Item .env.example .env
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests -v
 ```
 
-`VIDEO_ENCODER_BACKEND` admite `auto` (valor predeterminado), `nvenc` o `cpu`.
-
-## Construcción y arranque
+Para levantar el contenedor local:
 
 ```powershell
 docker compose -f docker-compose.yml build
 docker compose -f docker-compose.yml up -d
 ```
 
-Abre <http://127.0.0.1:8787>, pega un enlace público compatible y pulsa **Analizar**. Después elige formato, calidad y, para MP4, el códec.
-
-Ver registros:
+Ver logs:
 
 ```powershell
 docker compose logs -f --tail=100
 ```
 
-Detener la aplicación sin borrar el volumen temporal:
+## Versiones y releases
 
-```powershell
-docker compose down
-```
+RitaDown usa versionado semántico. Al cambiar `VERSION` en `main`, GitHub Actions publica automáticamente:
 
-Comprobar el healthcheck:
+- `ghcr.io/rit4lin/ritadown:X.Y.Z`
+- `ghcr.io/rit4lin/ritadown:X.Y`
+- `ghcr.io/rit4lin/ritadown:X`
+- `ghcr.io/rit4lin/ritadown:latest`
 
-```powershell
-docker compose ps
-docker inspect --format='{{json .State.Health}}' video-downloader-video-downloader-1
-```
+También crea la Release `vX.Y.Z`.
 
-El nombre real del contenedor aparece en `docker compose ps`. También puedes verificar el endpoint local:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8787/health
-```
-
-## Versiones y Releases
-
-RitaDown usa [versionado semántico](https://semver.org/lang/es/):
-
-- `v1.0.0`: primera versión estable.
-- `v1.0.1`: corrección compatible.
-- `v1.1.0`: funcionalidad nueva compatible.
-- `v2.0.0`: cambio incompatible.
-
-Cada etiqueta `vX.Y.Z` crea una Release de GitHub y publica las imágenes `ghcr.io/rit4lin/ritadown:X.Y.Z`, `X.Y`, `X` y `latest`. Para una instalación estable puedes fijar una versión concreta, por ejemplo `ghcr.io/rit4lin/ritadown:1.0.0`.
-
-## Actualizar yt-dlp durante el desarrollo
-
-La dependencia usa un mínimo de versión sin fijar el parche. Fuerza una reconstrucción sin caché para obtener una versión reciente compatible:
-
-```powershell
-docker compose -f docker-compose.yml build --pull --no-cache
-docker compose -f docker-compose.yml up -d
-```
-
-Revisa los cambios de `yt-dlp` antes de actualizar en una instalación estable.
-
-## Pruebas
-
-Las pruebas unitarias no realizan conexiones reales: simulan las respuestas DNS relevantes y usan únicamente la biblioteca estándar.
-
-Con Python 3.12 y un entorno virtual local:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m unittest discover -s tests -v
-```
-
-## Seguridad
-
-RitaDown no incluye autenticación integrada. No montes el socket de Docker, no uses modo privilegiado ni `network_mode: host`, y no lo publiques directamente en Internet. Consulta [SECURITY.md](SECURITY.md) para informar de vulnerabilidades.
+La versión de `yt-dlp` está fijada en `requirements.txt` para que las imágenes sean reproducibles. Dependabot comprueba actualizaciones periódicamente.

@@ -12,20 +12,29 @@
     <main class="container">
       <header>
         <h1>RitaDown</h1>
-        <p class="intro">Instagram · TikTok · YouTube · Facebook · X/Twitter</p>
+        <p class="intro">Instagram · TikTok · YouTube · Facebook · X · Reddit · Vimeo · Dailymotion · Pinterest · Bluesky · Twitch</p>
       </header>
 
       <section class="panel" aria-labelledby="form-title">
-        <h2 id="form-title" class="sr-only">Enlace del vídeo</h2>
+        <h2 id="form-title" class="sr-only">Enlace multimedia</h2>
         <label for="url">URL</label>
-        <textarea id="url" rows="4" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://www.instagram.com/…" required></textarea>
+        <textarea id="url" rows="4" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://…" required></textarea>
         <button id="analyze" type="button">Analizar</button>
       </section>
 
       <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
+      <section id="progress-panel" class="progress-panel" aria-label="Progreso de descarga" hidden>
+        <div class="progress-row">
+          <span id="progress-stage">Preparando</span>
+          <strong id="progress-percent">0%</strong>
+        </div>
+        <progress id="progress" max="100" value="0">0%</progress>
+        <div id="progress-meta" class="progress-meta"></div>
+      </section>
+
       <section id="result" class="panel result" aria-labelledby="video-title" hidden>
-        <img id="thumbnail" alt="Miniatura del vídeo" hidden>
+        <img id="thumbnail" alt="Miniatura" hidden>
         <div class="metadata">
           <h2 id="video-title"></h2>
           <dl>
@@ -40,7 +49,11 @@
             <label for="output-format">Formato</label>
             <select id="output-format">
               <option value="mp4">Vídeo MP4</option>
+              <option value="audio_original">Audio original</option>
+              <option value="m4a">Audio M4A</option>
+              <option value="opus">Audio Opus</option>
               <option value="mp3">Audio MP3</option>
+              <option value="srt">Subtítulos SRT</option>
             </select>
           </div>
 
@@ -75,7 +88,18 @@
               <option value="128">128 kbps</option>
             </select>
           </div>
+
+          <div id="subtitle-option">
+            <label for="subtitle-mode">Subtítulos</label>
+            <select id="subtitle-mode">
+              <option value="none">Sin subtítulos</option>
+              <option value="es">Español</option>
+              <option value="original">Idioma original</option>
+              <option value="auto">Automáticos</option>
+            </select>
+          </div>
         </div>
+
         <div class="actions">
           <button id="download" type="button">Descargar vídeo</button>
           <button id="reset" class="secondary" type="button">Borrar enlace</button>

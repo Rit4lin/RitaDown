@@ -16,6 +16,16 @@ ALLOWED_DOMAIN_SUFFIXES = (
     "youtu.be",
     "youtube-nocookie.com",
     "tiktok.com",
+    "reddit.com",
+    "redd.it",
+    "redditmedia.com",
+    "vimeo.com",
+    "dailymotion.com",
+    "dai.ly",
+    "pinterest.com",
+    "pin.it",
+    "bsky.app",
+    "twitch.tv",
 )
 ALLOWED_PORTS = {80, 443}
 
@@ -87,9 +97,7 @@ def validate_media_url(raw_url: str, *, resolve_dns: bool = True) -> ValidatedUR
         raise URLValidationError("El dominio no es válido.") from exc
 
     if not _is_allowed_hostname(hostname):
-        raise URLValidationError(
-            "Solo se admiten enlaces públicos de Instagram, TikTok, YouTube, Facebook y X/Twitter."
-        )
+        raise URLValidationError("La plataforma no está incluida en RitaDown.")
     if resolve_dns:
         resolve_public_addresses(hostname)
 
