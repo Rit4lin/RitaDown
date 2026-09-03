@@ -17,11 +17,19 @@ const elements = {
   codecOption: document.querySelector("#codec-option"),
   audioQuality: document.querySelector("#audio-quality"),
   audioQualityOption: document.querySelector("#audio-quality-option"),
+  subtitleMode: document.querySelector("#subtitle-mode"),
+  subtitleOption: document.querySelector("#subtitle-option"),
   download: document.querySelector("#download"),
   reset: document.querySelector("#reset"),
+  progressPanel: document.querySelector("#progress-panel"),
+  progress: document.querySelector("#progress"),
+  progressStage: document.querySelector("#progress-stage"),
+  progressPercent: document.querySelector("#progress-percent"),
+  progressMeta: document.querySelector("#progress-meta"),
 };
 
 let analyzedUrl = "";
+let currentJobId = "";
 
 function showStatus(message, kind = "busy") {
   elements.status.textContent = message;
@@ -37,6 +45,30 @@ function clearStatus() {
 function setBusy(isBusy) {
   elements.analyze.disabled = isBusy;
   elements.download.disabled = isBusy;
+  elements.reset.disabled = isBusy;
+}
+
+function setProgress(job = null) {
+  if (!job) {
+    elements.progressPanel.hidden = true;
+    elements.progress.value = 0;
+    elements.progressStage.textContent = "";
+    elements.progressPercent.textContent = "0%";
+    elements.progressMeta.textContent = "";
+    return;
+  }
+
+  const value = Number.isFinite(Number(job.progress)) ? Number(job.progress) : 0;
+  elements.progressPanel.hidden = false;
+  elements.progress.value = value;
+  elements.progressStage.textContent = job.stage || "Preparando";
+  elements.progressPercent.textContent = `${Math.round(value)}%`;
+
+  const metadata = [];
+  if (job.status === "queued" && job.position) metadata.push(`Posición ${job.position}`);
+  if (job.speed && job.speed !== "N/A") metadata.push(job.speed);
+  if (job.eta && job.eta !== "N/A") metadata.push(`ETA ${job.eta}`);
+  elements.progressMeta.textContent = metadata.join(" · ");
 }
 
 function formatDuration(seconds) {
@@ -50,32 +82,109 @@ function formatDuration(seconds) {
     .join(":");
 }
 
+function errorPayloadMessage(payload, fallback = "La solicitud no se pudo completar.") {
+  const message = payload?.detail || fallback;
+  if (!payload?.code) return message;
+  const suffix = payload.reference
+    ? `Código: ${payload.code} · Ref: ${payload.reference}`
+    : `Código: ${payload.code}`;
+  return `${message} ${suffix}`;
+}
+
 async function errorFromResponse(response) {
   try {
-    const payload = await response.json();
-    const message = payload.detail || "La solicitud no se pudo completar.";
-    if (!payload.code) return message;
-    const suffix = payload.reference
-      ? `Código: ${payload.code} · Ref: ${payload.reference}`
-      : `Código: ${payload.code}`;
-    return `${message} ${suffix}`;
+    return errorPayloadMessage(await response.json());
   } catch {
     return `La solicitud no se pudo completar. Código HTTP: ${response.status}`;
   }
 }
 
 function requestHeaders() {
-  return {
-    "Content-Type": "application/json",
-  };
+  return { "Content-Type": "application/json" };
 }
 
 function updateFormatOptions() {
-  const isAudio = elements.outputFormat.value === "mp3";
-  elements.videoQualityOption.hidden = isAudio;
-  elements.codecOption.hidden = isAudio;
-  elements.audioQualityOption.hidden = !isAudio;
-  elements.download.textContent = isAudio ? "Descargar MP3" : "Descargar vídeo";
+  const format = elements.outputFormat.value;
+  const isVideo = format === "mp4";
+  const isMp3 = format === "mp3";
+  const isSubtitle = format === "srt";
+
+  elements.videoQualityOption.hidden = !isVideo;
+  elements.codecOption.hidden = !isVideo;
+  elements.audioQualityOption.hidden = !isMp3;
+  elements.subtitleOption.hidden = !(isVideo || isSubtitle);
+
+  if (isSubtitle && elements.subtitleMode.value === "none") {
+    elements.subtitleMode.value = "original";
+  }
+
+  const labels = {
+    mp4: "Descargar vídeo",
+    audio_original: "Descargar audio",
+    m4a: "Descargar M4A",
+    opus: "Descargar Opus",
+    mp3: "Descargar MP3",
+    srt: "Descargar SRT",
+  };
+  elements.download.textContent = labels[format] || "Descargar";
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function fetchJob(jobId) {
+  const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(await errorFromResponse(response));
+  return (await response.json()).job;
+}
+
+function triggerFileDownload(job) {
+  const link = document.createElement("a");
+  link.href = job.file_url;
+  link.download = job.filename || "";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function waitForJob(jobId) {
+  let transientFailures = 0;
+
+  while (currentJobId === jobId) {
+    try {
+      const job = await fetchJob(jobId);
+      transientFailures = 0;
+      setProgress(job);
+
+      if (job.status === "queued") {
+        showStatus(job.position ? `En cola · posición ${job.position}` : "En cola");
+      } else if (job.status === "working") {
+        showStatus(job.stage || "Procesando");
+      } else if (job.status === "error") {
+        throw new Error(errorPayloadMessage(job.error, "No se pudo completar la descarga."));
+      } else if (job.status === "ready") {
+        triggerFileDownload(job);
+        showStatus("Descarga iniciada.", "success");
+        currentJobId = "";
+        setBusy(false);
+        return;
+      }
+    } catch (error) {
+      transientFailures += 1;
+      if (transientFailures < 3) {
+        await sleep(1000);
+        continue;
+      }
+      currentJobId = "";
+      setBusy(false);
+      showStatus(error.message || "No se pudo consultar la descarga.", "error");
+      return;
+    }
+    await sleep(800);
+  }
 }
 
 elements.outputFormat.addEventListener("change", updateFormatOptions);
@@ -87,9 +196,12 @@ elements.analyze.addEventListener("click", async () => {
     showStatus("Introduce una URL.", "error");
     return;
   }
+
   setBusy(true);
   elements.result.hidden = true;
+  setProgress(null);
   showStatus("Analizando…");
+
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -97,6 +209,7 @@ elements.analyze.addEventListener("click", async () => {
       body: JSON.stringify({ url }),
     });
     if (!response.ok) throw new Error(await errorFromResponse(response));
+
     const { media } = await response.json();
     analyzedUrl = url;
     elements.title.textContent = media.title;
@@ -105,6 +218,7 @@ elements.analyze.addEventListener("click", async () => {
     elements.maxHeight.textContent = media.available_heights?.length
       ? media.available_heights.slice(0, 6).map((height) => `${height}p`).join(", ")
       : "No indicada";
+
     if (media.thumbnail) {
       elements.thumbnail.src = media.thumbnail;
       elements.thumbnail.hidden = false;
@@ -112,6 +226,7 @@ elements.analyze.addEventListener("click", async () => {
       elements.thumbnail.removeAttribute("src");
       elements.thumbnail.hidden = true;
     }
+
     elements.result.hidden = false;
     showStatus("Listo.", "success");
   } catch (error) {
@@ -127,18 +242,18 @@ elements.download.addEventListener("click", async () => {
     elements.result.hidden = true;
     return;
   }
+
   setBusy(true);
-  const isAudio = elements.outputFormat.value === "mp3";
-  const isConversion = !isAudio && elements.videoCodec.value !== "original";
-  showStatus(
-    isAudio
-      ? "Preparando MP3…"
-      : isConversion
-        ? `Convirtiendo a ${elements.videoCodec.value.toUpperCase()}…`
-        : "Preparando MP4…"
-  );
+  setProgress({
+    status: "queued",
+    progress: 0,
+    stage: "En cola",
+    position: null,
+  });
+  showStatus("Añadiendo a la cola…");
+
   try {
-    const response = await fetch("/api/download", {
+    const response = await fetch("/api/jobs", {
       method: "POST",
       headers: requestHeaders(),
       body: JSON.stringify({
@@ -147,35 +262,30 @@ elements.download.addEventListener("click", async () => {
         output_format: elements.outputFormat.value,
         video_codec: elements.videoCodec.value,
         audio_quality: elements.audioQuality.value,
+        subtitle_mode: elements.subtitleMode.value,
       }),
     });
     if (!response.ok) throw new Error(await errorFromResponse(response));
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const disposition = response.headers.get("Content-Disposition") || "";
-    const encodedName = disposition.match(/filename\*=utf-8''([^;]+)/i);
-    const simpleName = disposition.match(/filename="?([^";]+)"?/i);
-    const fallbackName = isAudio ? "audio.mp3" : "video.mp4";
-    link.download = encodedName ? decodeURIComponent(encodedName[1]) : (simpleName?.[1] || fallbackName);
-    link.href = objectUrl;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(objectUrl);
-    showStatus("Descarga iniciada.", "success");
+
+    const { job } = await response.json();
+    currentJobId = job.id;
+    setProgress(job);
+    await waitForJob(job.id);
   } catch (error) {
-    showStatus(error.message || "No se pudo descargar el vídeo.", "error");
-  } finally {
+    currentJobId = "";
     setBusy(false);
+    setProgress(null);
+    showStatus(error.message || "No se pudo iniciar la descarga.", "error");
   }
 });
 
 elements.reset.addEventListener("click", () => {
+  if (currentJobId) return;
   analyzedUrl = "";
   elements.url.value = "";
   elements.result.hidden = true;
   elements.thumbnail.removeAttribute("src");
+  setProgress(null);
   clearStatus();
   elements.url.focus();
 });
