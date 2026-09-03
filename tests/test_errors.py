@@ -28,6 +28,12 @@ class ErrorCodeTests(unittest.TestCase):
             "RDL-3201",
         )
 
+    def test_subtitle_code(self) -> None:
+        self.assertEqual(
+            _downloader_error_code("No se encontraron subtítulos para ese vídeo."),
+            "RDL-2200",
+        )
+
     def test_generic_code(self) -> None:
         self.assertEqual(_downloader_error_code("Fallo desconocido"), "RDL-2000")
 
