@@ -3,9 +3,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.downloader import (
+    DownloaderError,
     MediaInfo,
     _configured_encoder_backend,
     _ffmpeg_transcode_arguments,
+    _metadata_to_media_info,
     _preferred_subtitle_language,
     _subtitle_arguments,
     _video_format_selector,
@@ -80,6 +82,86 @@ class DownloaderTests(unittest.TestCase):
         self.assertAlmostEqual(updates[0].percent, 50.0)
         self.assertEqual(updates[0].speed, "2.5MiB/s")
         self.assertEqual(updates[0].eta, "00:10")
+
+    def test_normal_video_metadata_is_unchanged(self) -> None:
+        media = _metadata_to_media_info(
+            {
+                "title": "Vídeo directo",
+                "extractor_key": "Twitter",
+                "duration": 12,
+                "formats": [{"vcodec": "avc1", "height": 720}],
+            }
+        )
+        self.assertEqual(media.title, "Vídeo directo")
+        self.assertEqual(media.platform, "Twitter")
+        self.assertEqual(media.duration, 12)
+        self.assertEqual(media.available_heights, (720,))
+
+    def test_unwraps_single_entry_playlist_and_keeps_container_fallbacks(self) -> None:
+        media = _metadata_to_media_info(
+            {
+                "_type": "playlist",
+                "title": "Publicación en X",
+                "extractor_key": "Twitter",
+                "thumbnail": "https://example.com/post.jpg",
+                "entries": [
+                    {
+                        "duration": 9,
+                        "formats": [
+                            {"vcodec": "avc1", "height": 1080},
+                            {"vcodec": "avc1", "height": 720},
+                        ],
+                    }
+                ],
+            }
+        )
+        self.assertEqual(media.title, "Publicación en X")
+        self.assertEqual(media.platform, "Twitter")
+        self.assertEqual(media.thumbnail, "https://example.com/post.jpg")
+        self.assertEqual(media.duration, 9)
+        self.assertEqual(media.available_heights, (1080, 720))
+
+    def test_unwraps_single_entry_even_without_playlist_type(self) -> None:
+        media = _metadata_to_media_info(
+            {
+                "title": "Contenedor",
+                "extractor_key": "Twitter",
+                "entries": [
+                    None,
+                    {
+                        "title": "Vídeo único",
+                        "duration": 7,
+                        "formats": [{"vcodec": "avc1", "height": 480}],
+                    },
+                ],
+            }
+        )
+        self.assertEqual(media.title, "Vídeo único")
+        self.assertEqual(media.platform, "Twitter")
+        self.assertEqual(media.duration, 7)
+        self.assertEqual(media.available_heights, (480,))
+
+    def test_rejects_two_real_entries(self) -> None:
+        with self.assertRaisesRegex(DownloaderError, "listas, carruseles"):
+            _metadata_to_media_info(
+                {
+                    "_type": "playlist",
+                    "entries": [
+                        {"id": "one", "formats": [{"vcodec": "avc1", "height": 720}]},
+                        {"id": "two", "formats": [{"vcodec": "avc1", "height": 720}]},
+                    ],
+                }
+            )
+
+    def test_invalid_playlist_entries_fail_safely(self) -> None:
+        with self.assertRaises(DownloaderError):
+            _metadata_to_media_info(
+                {
+                    "_type": "playlist",
+                    "title": "Sin vídeo interpretable",
+                    "entries": [None, {}, "invalid"],
+                }
+            )
 
     def test_subtitle_selection(self) -> None:
         media = MediaInfo(
