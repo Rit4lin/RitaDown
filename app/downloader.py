@@ -262,9 +262,47 @@ def _metadata_languages(value: object) -> tuple[str, ...]:
     )
 
 
+def _single_media_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    entries = metadata.get("entries")
+    if entries is None:
+        if metadata.get("_type") in {"playlist", "multi_video"}:
+            raise DownloaderError(
+                "No se admiten listas, carruseles ni publicaciones con varios vídeos."
+            )
+        return metadata
+
+    if not isinstance(entries, list):
+        raise DownloaderError("No se pudo interpretar la información del vídeo.")
+
+    valid_entries = [
+        entry for entry in entries if isinstance(entry, dict) and entry
+    ]
+    if len(valid_entries) > 1:
+        raise DownloaderError(
+            "No se admiten listas, carruseles ni publicaciones con varios vídeos."
+        )
+
+    if not valid_entries:
+        if metadata.get("_type") in {"playlist", "multi_video"}:
+            raise DownloaderError("No se pudo interpretar la información del vídeo.")
+        normalized = dict(metadata)
+        normalized.pop("entries", None)
+        return normalized
+
+    container = {
+        key: value
+        for key, value in metadata.items()
+        if key not in {"entries", "_type"}
+    }
+    normalized = {**container, **valid_entries[0]}
+    for key in ("title", "extractor_key", "extractor", "thumbnail", "language"):
+        if not normalized.get(key) and container.get(key):
+            normalized[key] = container[key]
+    return _single_media_metadata(normalized)
+
+
 def _metadata_to_media_info(metadata: dict[str, Any]) -> MediaInfo:
-    if metadata.get("_type") in {"playlist", "multi_video"} or metadata.get("entries"):
-        raise DownloaderError("No se admiten listas, carruseles ni publicaciones con varios vídeos.")
+    metadata = _single_media_metadata(metadata)
 
     formats = metadata.get("formats") or []
     heights = {
