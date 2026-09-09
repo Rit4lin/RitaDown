@@ -4,6 +4,14 @@ Todos los cambios relevantes de RitaDown se documentan en este archivo.
 
 El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [1.2.1] - 2026-09-09
+
+### Corregido
+
+- Las publicaciones de X/Twitter con un único vídeo ya no se clasifican erróneamente como listas, carruseles o publicaciones multivídeo (`RDL-2102`) cuando `yt-dlp` devuelve metadatos con estructura `playlist`/`entries`.
+- Se conservan metadatos útiles del contenedor al desenvolver una única entrada multimedia y se mantiene el rechazo de publicaciones con dos o más entradas reales.
+- Añadida cobertura de regresión para vídeos directos, contenedores de una sola entrada, múltiples entradas y metadatos inválidos.
+
 ## [1.2.0] - 2026-09-03
 
 ### Añadido
