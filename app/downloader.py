@@ -85,9 +85,13 @@ def _base_arguments() -> list[str]:
         "--socket-timeout",
         "15",
         "--retries",
-        "2",
+        "4",
         "--fragment-retries",
-        "2",
+        "4",
+        "--retry-sleep",
+        "http:exp=1:8",
+        "--retry-sleep",
+        "fragment:exp=1:8",
     ]
 
 

@@ -1,4 +1,4 @@
-FROM denoland/deno:bin-2.9.3 AS deno-runtime
+FROM denoland/deno:bin-2.9.7 AS deno-runtime
 
 FROM python:3.12-slim-bookworm
 
